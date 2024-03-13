@@ -1,6 +1,7 @@
 import socket
 import struct
 import textwrap
+from prettytable import PrettyTable
 
 def main():
     # Crée une socket brute et la lie à l'interface publique
@@ -10,21 +11,25 @@ def main():
         # Reçoit des données de la socket
         raw_data, addr = conn.recvfrom(65536)
         # Décompose la trame Ethernet
-        dest_mac, src_mac, eth_proto, data = ethernet_frame(raw_data)
+        _, _, eth_proto, data = ethernet_frame(raw_data)
         # Si le protocole Ethernet est IPv4 (8), décompose le paquet IPv4
         if eth_proto == 8:
             (version, header_length, ttl, proto, src, target, data) = ipv4_packet(data)
+            # Crée une table avec les informations du paquet IPv4
+            table = PrettyTable()
+            table.field_names = ["Version", "Longueur d'en-tête", "TTL", "Protocole", "Source", "Cible"]
+            table.add_row([version, header_length, ttl, proto, src, target])
             print('\nPaquet IPv4:')
-            print('Version: {}, Longueur d\'en-tête: {}, TTL: {},'.format(version, header_length, ttl))
-            print('Protocole: {}, Source: {}, Cible: {}'.format(proto, src, target))
+            print(table)
+            print('\n\n////////////////////////////////////////////////\n\n')
 
 # Décompose la trame Ethernet
 def ethernet_frame(data):
     # Le format '! 6s 6s H' représente deux chaînes de 6 octets et un entier de 2 octets
     # Décompose les données en MAC de destination, MAC source et protocole
-    dest_mac, src_mac, proto = struct.unpack('! 6s 6s H', data[:14])
-    # Renvoie les adresses MAC, le protocole et les données
-    return get_mac_addr(dest_mac), get_mac_addr(src_mac), socket.htons(proto), data[14:]
+    _, _, proto = struct.unpack('! 6s 6s H', data[:14])
+    # Renvoie le protocole et les données
+    return _, _, socket.htons(proto), data[14:]
 
 # Décompose le paquet IPv4
 def ipv4_packet(data):
@@ -43,9 +48,14 @@ def ipv4_packet(data):
 def ipv4(addr):
     return '.'.join(map(str, addr))
 
-# Renvoie une adresse MAC correctement formatée (par exemple AA:BB:CC:DD:EE:FF)
-def get_mac_addr(bytes_addr):
-    bytes_str = map('{:02x}'.format, bytes_addr)
-    return ':'.join(bytes_str).upper()
+from scapy.all import sniff, ICMP
 
-main()
+# Intercepte les 4 prochains paquets ICMP sur l'interface eth0
+packets = sniff(count=4, filter="icmp", iface="eth0")
+
+# Affiche les paquets interceptés
+for packet in packets:
+    print(packet.summary())
+
+
+#main()
